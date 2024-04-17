@@ -24,9 +24,9 @@ class _TroopData:
 class Database:
     def __init__(self, file):
         self.__con = sqlite3.connect(file)
-        self.__troops = self.__load_data__()
+        self.__troops = self._load_data_()
 
-    def __load_data__(self):
+    def _load_data_(self):
         data = {}
         troop_records = self.__con.execute("SELECT * FROM Troops").fetchall()
         for troop_record in troop_records:

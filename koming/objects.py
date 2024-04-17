@@ -8,10 +8,6 @@ class _CocObject(ABC):
         self.hp = hp
 
     @property
-    def resource_file_path(self) -> str:
-        return self.resource_folder_path + '/' + self.name
-
-    @property
     @abstractmethod
     def resource_folder_path(self) -> str:
         pass
