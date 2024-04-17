@@ -1,6 +1,7 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod, ABC
 
-from koming.data import Database
+from koming.data import _AttackableData, _AttackableLevelData, _TroopData, Database, _TroopLevelData, _DefenceData, \
+    _DefenceLevelData
 
 
 class _CocObject(ABC):
@@ -18,15 +19,11 @@ class _CocObject(ABC):
         pass
 
 
-class _Troop(_CocObject, ABC):
-    def __init__(self, db: Database, lvl: int):
-        self.__data = db.get(self.name)
-        self.__lvl_data = self.__data.get_level(lvl)
-        super().__init__(self.__lvl_data.hp)
-
-    @property
-    def resource_folder_path(self) -> str:
-        return 'troops'
+class _Attackable(_CocObject, ABC):
+    def __init__(self, atk_able: _AttackableData, atk_able_lvl: _AttackableLevelData):
+        self.__data = atk_able
+        self.__lvl_data = atk_able_lvl
+        super().__init__(atk_able_lvl.hp)
 
     @property
     def range(self) -> float:
@@ -41,6 +38,32 @@ class _Troop(_CocObject, ABC):
         return self.__lvl_data.damage_per_hit
 
 
+class _Troop(_Attackable, ABC):
+    def __init__(self, db: Database, lvl: int):
+        self.__data: _TroopData = db.get_troop(self.name)
+        self.__lvl_data: _TroopLevelData = self.__data.get_level(lvl)
+        super().__init__(self.__data, self.__lvl_data)
+
+    @property
+    def resource_folder_path(self) -> str:
+        return 'troops'
+
+
+class _Defence(_Attackable, ABC):
+    def __init__(self, db: Database, lvl: int):
+        self.__data: _DefenceData = db.get_defence(self.name)
+        self.__lvl_data: _DefenceLevelData = self.__data.get_level(lvl)
+        super().__init__(self.__data, self.__lvl_data)
+
+    @property
+    def resource_folder_path(self) -> str:
+        return 'defences'
+
+    @property
+    def size(self) -> tuple[int, int]:
+        return self.__data.size
+
+
 class Barbarian(_Troop):
     def __init__(self, db: Database, lvl: int):
         super().__init__(db, lvl)
@@ -48,3 +71,12 @@ class Barbarian(_Troop):
     @property
     def name(self) -> str:
         return 'barbarian'
+
+
+class Cannon(_Defence):
+    def __init__(self, db: Database, lvl: int):
+        super().__init__(db, lvl)
+
+    @property
+    def name(self) -> str:
+        return 'cannon'
