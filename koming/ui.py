@@ -6,16 +6,18 @@ from koming.objects import _Troop, _CocObject, _Defence
 
 
 class UIVillage(Village):
-    SIZE = 800, 800
 
     def __init__(self, res_path: str):
         super().__init__()
-        self.__resource_path = res_path + '/'
-        self.screen = pygame.display.set_mode(UIVillage.SIZE)
-        self.load_image(self.__resource_path + "background.png")
         pygame.display.init()
         pygame.display.set_caption("Pygame Tiled Demo")
+        display_info = pygame.display.Info()
+        display_w = min(display_info.current_w, display_info.current_h) * 0.9
+        self.size = display_w, display_w
+        self.__resource_path = res_path + '/'
         self.running = True
+        self.screen = pygame.display.set_mode(self.size)
+        self.load_image(self.__resource_path + "background.png")
 
     def _get_coc_obj_resource_path_(self, obj: _CocObject):
         return f'{self.__resource_path}{obj.resource_folder_path}/{obj.name}.png'
@@ -32,9 +34,8 @@ class UIVillage(Village):
         tile_img = pygame.image.load(self._get_coc_obj_resource_path_(defence))
         self.screen.blit(tile_img, ui_coord)
 
-    @staticmethod
-    def scaled_to_ui_coord(scaled: tuple[float, float]):
-        return UIVillage.SIZE[0] * scaled[0], UIVillage.SIZE[1] * scaled[1]
+    def scaled_to_ui_coord(self, scaled: tuple[float, float]):
+        return self.size[0] * scaled[0], self.size[1] * scaled[1]
 
     def run(self):
         while self.running:
@@ -50,7 +51,7 @@ class UIVillage(Village):
 
     def load_image(self, file):
         image = pygame.image.load(file)
-        image = pygame.transform.scale(image, UIVillage.SIZE)
+        image = pygame.transform.scale(image, self.size)
         rect = image.get_rect()
 
         self.screen.blit(image, rect)
