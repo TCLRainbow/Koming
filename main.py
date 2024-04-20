@@ -1,18 +1,14 @@
-import pygame.display
-
-from koming.objects import *
 from koming.battlefield import UIVillage
+from koming.data import Database
+from koming.objects import *
 
 if __name__ == '__main__':
-    game = UIVillage('resources')
     db = Database('koming.sqlite')
+    game = UIVillage(44, db, 'resources')
 
-    barb = Barbarian(db, 1, (0.2, 0.4))
-    game.add_troop(barb)
-    cannon = Cannon(db, 1, (0.4, 0.6))
-    game.add_defence(cannon)
-    wall = Wall(db, 1, (0.1, 0.56))
-    game.add_defence(wall)
+    barb = game.add_troop(Barbarian, 1, (0.2, 0.4))
+    cannon = game.add_defence(Cannon, 1, (0.4, 0.6))
+    wall = game.add_defence(Wall, 1, (0.1, 0.56))
 
     pygame.display.update()
     game.run()
