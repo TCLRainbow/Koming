@@ -1,10 +1,16 @@
+import time
 from typing import Type
 
+import numpy as np
 import pygame
-from pygame.locals import *
+from pathfinding.core.grid import Grid
 
 from koming.data import Database, _DefenceData, _DefenceLevelData
 from koming.objects import _Troop, _CocObject, _Defence
+
+
+def random_pos():
+    return np.random.random(2)
 
 
 class Village:
@@ -13,12 +19,16 @@ class Village:
         self.__db = db
         self.troops: list[_Troop] = []
         self.defences: list[_Defence] = []
+        self.map_weights = np.ones((side_len, side_len)) * 1
 
     @property
     def side_len(self):
         return self.__side_len
 
-    def add_troop(self, cls: Type[_Troop], lvl, scaled_pos):
+    def add_troop(self, cls: Type[_Troop], lvl, scaled_pos=None):
+        if not scaled_pos:
+            scaled_pos = random_pos()
+
         data = self.__db.get_troop(cls.NAME)
         lvl_data = data.get_level(lvl)
         rect = pygame.Rect(self.scaled_to_village_coord(scaled_pos), (1, 1))
@@ -26,16 +36,25 @@ class Village:
         self.troops.append(troop)
         return troop
 
-    def add_defence(self, cls: Type[_Defence], lvl, scaled_pos):
+    def add_defence(self, cls: Type[_Defence], lvl, scaled_pos=None):
+        if not scaled_pos:
+            scaled_pos = random_pos()
+
         data: _DefenceData = self.__db.get_defence(cls.NAME)
         lvl_data: _DefenceLevelData = data.get_level(lvl)
-        rect = pygame.Rect(self.scaled_to_village_coord(scaled_pos), data.size)
-        defence = cls(data, lvl_data, lvl, rect)
+        hit_box = pygame.Rect(self.scaled_to_village_coord(scaled_pos), data.size)
+        defence = cls(data, lvl_data, lvl, hit_box)
+
         self.defences.append(defence)
+        self.update_map_defence_weight(defence)
         return defence
 
+    def update_map_defence_weight(self, defence: _Defence):
+        self.map_weights[defence.hit_box_slice] = defence.map_weight
+
     def scaled_to_village_coord(self, coord: tuple[float, float], translate=0):
-        return round(coord[0] * self.side_len + translate), round(coord[1] * self.side_len + translate)
+        scale = self.side_len - 1
+        return round(coord[0] * scale + translate), round(coord[1] * scale + translate)
 
     def scaled_translate_by_village(self, coord: tuple[float, float], x, y):
         r = coord[0] + x / self.side_len, coord[1] + y / self.side_len
@@ -46,6 +65,35 @@ class Village:
 
     def collide_defence_hit_box(self, rect: pygame.Rect):
         return rect.collideobjects(self.defences, key=lambda d: d.hit_box)
+
+    def run(self):
+        for troop in self.troops:
+            troop.select_target(self.defences)
+            troop.search_path(Grid(matrix=self.map_weights))
+            self.draw_path(troop)
+        all_done = False
+        while not all_done:
+            all_done = True
+            for troop in self.troops:
+                if troop.target_path:
+                    all_done = False
+                    troop.approach_target()
+            time.sleep(1/4)
+            pygame.event.pump()
+            self.end_run_iter()
+
+        print('Program ended')
+        block = True
+        while block:
+            event = pygame.event.wait()
+            if event.type == pygame.QUIT:
+                block = False
+
+    def draw_path(self, troop: _Troop):
+        pass
+
+    def end_run_iter(self):
+        pass
 
 
 class UIVillage(Village):
@@ -62,7 +110,6 @@ class UIVillage(Village):
         self.__resource_path = res_path + '/'
         self.__ui_debug = ui_debug
         self.__bg = self._get_bg_()
-        self.running = True
         self.screen = pygame.display.set_mode(self.__size)
 
     def _get_coc_obj_resource_path_(self, obj: _CocObject):
@@ -72,10 +119,10 @@ class UIVillage(Village):
         surface = pygame.Surface(self.__size)
         if self.__ui_debug:
             cmyk = (
-                (0, 255, 255),
-                (255, 0, 255),
-                (255, 255, 0),
-                (0, 0, 0)
+                (255, 0, 0),
+                (200, 0, 0),
+                (0, 0, 255),
+                (0, 0, 200)
             )
             for x in range(self.side_len):
                 color_i = x % 4
@@ -93,18 +140,6 @@ class UIVillage(Village):
     def scaled_to_ui_coord(self, scaled: tuple[float, float], translate=0):
         return self.__size[0] * scaled[0] + translate, self.__size[1] * scaled[1] + translate
 
-    def run(self):
-        while self.running:
-            for event in pygame.event.get():
-                if event.type == QUIT:
-                    self.running = False
-
-                elif event.type == KEYDOWN:
-                    if event.key == K_l:
-                        pass
-
-        pygame.quit()
-
     def village_rect_to_ui(self, rect: pygame.Rect):
         ratio = self.__size[0] / self.side_len
         ui_rect = rect.copy()
@@ -118,6 +153,9 @@ class UIVillage(Village):
         ui_rect = self.village_rect_to_ui(rect) if scale else rect
         if surface is None:
             surface = self.screen
+        # ui_rect_surface = pygame.Surface(ui_rect.size)
+        # ui_rect_surface.fill(rgb)
+        # surface.blit(ui_rect_surface, ui_rect)
         pygame.draw.rect(surface, rgb, ui_rect)
 
     def draw_troop(self, troop: _Troop):
@@ -135,6 +173,17 @@ class UIVillage(Village):
         self.screen.blit(self.__bg, (0, 0))
         for defence in self.defences:
             self.draw_defence(defence, True)
+        for troop in self.troops:
+            self.draw_troop(troop)
+        pygame.display.update()
+
+    def draw_path(self, troop: _Troop):
+        for i in range(len(troop.target_path) - 1):
+            step = troop.target_path[i]
+            self.draw_rect(pygame.Rect(step.x, step.y, 1, 1), troop.color)
+        pygame.display.update()
+
+    def end_run_iter(self):
         for troop in self.troops:
             self.draw_troop(troop)
         pygame.display.update()
