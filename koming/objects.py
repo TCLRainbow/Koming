@@ -1,4 +1,3 @@
-import random
 from abc import ABC
 from typing import Optional
 
@@ -26,8 +25,8 @@ class _CocObject(ABC):
 
     @property
     def hit_box_slice(self):
-        slice_x = slice(self.hit_box.topleft[0], self.hit_box.size[0])
-        slice_y = slice(self.hit_box.topleft[1], self.hit_box.size[1])
+        slice_x = slice(self.hit_box.x, self.hit_box.x+self.hit_box.w)
+        slice_y = slice(self.hit_box.y, self.hit_box.y+self.hit_box.h)
         return slice_y, slice_x
 
 
@@ -84,16 +83,12 @@ class _Troop(_Attackable, ABC):
     def color(self):
         return self.__color
 
-    def select_target(self, defences: list[_Defence]):
+    def select_target(self, defences: list[_Defence], i):
         # Naive: Should filter targets then select closest
-        self.target = random.choice(defences)
+        self.target = defences[i]
 
     def search_path(self, grid: Grid):
-        try:
-            start = grid.node(*self.hit_box.topleft)
-        except IndexError:
-            print('INDEX ERROR', self.hit_box)
-            raise
+        start = grid.node(*self.hit_box.topleft)
         end = grid.node(*self.target.hit_box.topleft)
         finder = AStarFinder(diagonal_movement=DiagonalMovement.always)
         self.target_path: list[GridNode] = finder.find_path(start, end, grid)[0]
@@ -110,6 +105,30 @@ class _Troop(_Attackable, ABC):
 
 class Barbarian(_Troop):
     NAME = 'barbarian'
+
+    def __init__(self, data: _TroopData, lvl_data: _TroopLevelData,
+                 lvl: int, hit_box: pygame.Rect):
+        super().__init__(data, lvl_data, lvl, hit_box)
+
+
+class Archer(_Troop):
+    NAME = 'archer'
+
+    def __init__(self, data: _TroopData, lvl_data: _TroopLevelData,
+                 lvl: int, hit_box: pygame.Rect):
+        super().__init__(data, lvl_data, lvl, hit_box)
+
+
+class Giant(_Troop):
+    NAME = 'giant'
+
+    def __init__(self, data: _TroopData, lvl_data: _TroopLevelData,
+                 lvl: int, hit_box: pygame.Rect):
+        super().__init__(data, lvl_data, lvl, hit_box)
+
+
+class Goblin(_Troop):
+    NAME = 'goblin'
 
     def __init__(self, data: _TroopData, lvl_data: _TroopLevelData,
                  lvl: int, hit_box: pygame.Rect):
