@@ -8,7 +8,7 @@ if __name__ == '__main__':
     db = Database('koming.sqlite')
     game = UIVillage(VILLAGE_SIDE_LEN, db, 'resources', True)
 
-    game.add_troop(Barbarian, 1, (0.8, 0.9))
+    game.add_troop(Barbarian, 1)
     game.add_troop(Archer, 1)
     game.add_troop(Giant, 1)
     game.add_troop(Goblin, 1)

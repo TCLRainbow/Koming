@@ -3,12 +3,9 @@ from typing import Type
 
 import numpy as np
 import pygame
-from pathfinding.core.grid import Grid
 
 from koming.data import Database, _DefenceData, _DefenceLevelData
 from koming.objects import _Troop, _CocObject, _Defence
-
-EMPTY_TILE_WEIGHT = 1
 
 
 class Village:
@@ -18,7 +15,7 @@ class Village:
         self.__rng = np.random.default_rng()
         self.troops: list[_Troop] = []
         self.defences: list[_Defence] = []
-        self.map_weights = np.ones((side_len, side_len)) * EMPTY_TILE_WEIGHT
+        self.map_weights = np.zeros((side_len, side_len), dtype=np.uint)
 
     @property
     def side_len(self):
@@ -52,7 +49,7 @@ class Village:
         return defence
 
     def remove_defence(self, defence: _Defence):
-        self.map_weights[defence.hit_box_slice] = EMPTY_TILE_WEIGHT
+        self.map_weights[defence.hit_box_slice] = 0
         self.defences.remove(defence)
 
     def update_map_defence_weight(self, defence: _Defence):
@@ -74,7 +71,7 @@ class Village:
     def run(self):
         for i, troop in enumerate(self.troops):
             troop.select_target(self.defences, i)
-            troop.search_path(Grid(matrix=self.map_weights))
+            troop.search_path(self.map_weights)
             self.draw_path(troop)
         troops_to_move = [troop for troop in self.troops if troop.target_path]
         while troops_to_move:
@@ -186,7 +183,7 @@ class UIVillage(Village):
     def draw_path(self, troop: _Troop):
         for i in range(len(troop.target_path) - 1):
             step = troop.target_path[i]
-            self.draw_rect(pygame.Rect(step.x, step.y, 1, 1), troop.color)
+            self.draw_rect(pygame.Rect(step, (1, 1)), troop.color)
         pygame.display.update()
 
     def end_tick(self):

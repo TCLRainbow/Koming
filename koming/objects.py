@@ -3,13 +3,10 @@ from typing import Optional
 
 import numpy as np
 import pygame
-from pathfinding.core.diagonal_movement import DiagonalMovement
-from pathfinding.core.grid import Grid
-from pathfinding.core.node import GridNode
-from pathfinding.finder.a_star import AStarFinder
 
 from koming.data import _AttackableData, _AttackableLevelData, _TroopData, _TroopLevelData, _DefenceData, \
     _DefenceLevelData
+from koming.pathfinding import a_star
 
 
 class _CocObject(ABC):
@@ -77,7 +74,7 @@ class _Troop(_Attackable, ABC):
         self.__color = np.random.randint(127, 256), np.random.randint(200, 256), np.random.randint(127, 256)
         super().__init__(self.__data, self.__lvl_data, hit_box)
         self.target: Optional[_Defence] = None
-        self.target_path: list[GridNode] = []
+        self.target_path: list[tuple[int, int]] = []
 
     @property
     def color(self):
@@ -87,17 +84,15 @@ class _Troop(_Attackable, ABC):
         # Naive: Should filter targets then select closest
         self.target = defences[i]
 
-    def search_path(self, grid: Grid):
-        start = grid.node(*self.hit_box.topleft)
-        end = grid.node(*self.target.hit_box.topleft)
-        finder = AStarFinder(diagonal_movement=DiagonalMovement.always)
-        self.target_path: list[GridNode] = finder.find_path(start, end, grid)[0]
-        self.target_path.pop(0)
+    def search_path(self, weight_map: np.ndarray):
+        weight = weight_map[self.target.hit_box_slice]
+        weight_map[self.target.hit_box_slice] = 0
+        self.target_path = a_star(weight_map, self.hit_box.topleft, self.target.hit_box.topleft)
+        weight_map[self.target.hit_box_slice] = weight
 
     def approach_target(self):
         if self.target_path:
-            self.hit_box.update(self.target_path[0].x, self.target_path[0].y,
-                                self.hit_box.size[0], self.hit_box.size[1])
+            self.hit_box.update(self.target_path[0], self.hit_box.size)
             self.target_path.pop(0)
             return True
         return False
