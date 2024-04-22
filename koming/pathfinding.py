@@ -31,10 +31,9 @@ def a_star(array, start_xy, goal_xy):
         close_set.add(current)
         for i, j in neighbors:
             neighbor = current[0] + i, current[1] + j
-            tentative_g_score = g_score[current] + array[neighbor]
-
             if 0 <= neighbor[0] < array.shape[0]:
                 if 0 <= neighbor[1] < array.shape[1]:
+                    tentative_g_score = g_score[current] + array[neighbor]
                     if neighbor in close_set and tentative_g_score >= g_score.get(neighbor, 0):
                         continue
 
