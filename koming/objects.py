@@ -1,4 +1,5 @@
 from abc import ABC
+from random import choice
 from typing import Optional
 
 import numpy as np
@@ -18,7 +19,7 @@ class _CocObject(ABC):
         self.hit_box = hit_box
 
     def __repr__(self):
-        return f'{self.NAME}{self.hit_box.topleft}'
+        return f'{self.NAME}{self.hit_box.topleft}@{id(self):x}'
 
     @property
     def hit_box_slice(self):
@@ -48,6 +49,7 @@ class _Attackable(_CocObject, ABC):
 
 class _Defence(_Attackable, ABC):
     RESOURCE_FOLDER_PATH = 'defences'
+    UPDATE_WEIGHT_WHEN_DAMAGED = False
 
     def __init__(self, data: _DefenceData, lvl_data: _DefenceLevelData,
                  lvl: int, hit_box: pygame.Rect):
@@ -55,12 +57,44 @@ class _Defence(_Attackable, ABC):
         self.__lvl_data: _DefenceLevelData = lvl_data
         self.__lvl = lvl
         super().__init__(self.__data, self.__lvl_data, hit_box)
+
+        self.__on_damaged_callbacks = []
+        self.__on_destroy_callbacks = []
+        self.__on_destroy_completed_callbacks = []
+
         self.bound_box = hit_box.inflate(2, 2)
         self.map_weight = self.hp
 
     @property
     def size(self) -> tuple[int, int]:
         return self.__data.size
+
+    def on_damaged(self, func):
+        if self.UPDATE_WEIGHT_WHEN_DAMAGED:
+            # print(f'{self} will update weight on damaged')
+            self.__on_damaged_callbacks.append(func)
+        else:
+            pass
+            # print(f'{self} will not update weight on damaged')
+
+    def on_destroy(self, func):
+        # print(f'{self} will update weight on destroyed')
+        self.__on_destroy_callbacks.append(func)
+
+    def on_destroy_completed(self, func):
+        self.__on_destroy_completed_callbacks.append(func)
+
+    def receive_dmg(self, dmg: int):
+        self.hp -= dmg
+        print(f'{self} received dmg. HP: {self.hp}')
+        if self.hp > 0:
+            for func in self.__on_damaged_callbacks:
+                func()
+        else:
+            for func in self.__on_destroy_callbacks:
+                func()
+            for func in self.__on_destroy_completed_callbacks:
+                func()
 
 
 class _Troop(_Attackable, ABC):
@@ -73,6 +107,9 @@ class _Troop(_Attackable, ABC):
         self.__lvl = lvl
         self.__color = np.random.randint(127, 256), np.random.randint(200, 256), np.random.randint(127, 256)
         super().__init__(self.__data, self.__lvl_data, hit_box)
+
+        self.__on_moved_callback = []
+
         self.target: Optional[_Defence] = None
         self.target_path: list[tuple[int, int]] = []
 
@@ -80,9 +117,10 @@ class _Troop(_Attackable, ABC):
     def color(self):
         return self.__color
 
-    def select_target(self, defences: list[_Defence], i):
+    def select_target(self, defences: list[_Defence]):
         # Naive: Should filter targets then select closest
-        self.target = defences[i]
+        self.target = choice(defences)
+        print(f'{self} selected target {self.target}')
 
     def search_path(self, weight_map: np.ndarray):
         weight = weight_map[self.target.hit_box_slice]
@@ -92,10 +130,20 @@ class _Troop(_Attackable, ABC):
 
     def approach_target(self):
         if self.target_path:
+            old = self.hit_box.copy()
             self.hit_box.update(self.target_path[0], self.hit_box.size)
             self.target_path.pop(0)
+            for func in self.__on_moved_callback:
+                func(old)
             return True
         return False
+
+    def attack(self):
+        if self.target.hp > 0:  # Should remove later becuz should reselect target
+            self.target.receive_dmg(int(self.dph))
+
+    def on_moved(self, func):
+        self.__on_moved_callback.append(func)
 
 
 class Barbarian(_Troop):
@@ -124,6 +172,14 @@ class Giant(_Troop):
 
 class Goblin(_Troop):
     NAME = 'goblin'
+
+    def __init__(self, data: _TroopData, lvl_data: _TroopLevelData,
+                 lvl: int, hit_box: pygame.Rect):
+        super().__init__(data, lvl_data, lvl, hit_box)
+
+
+class OnePunchMan(_Troop):
+    NAME = 'one punch man'
 
     def __init__(self, data: _TroopData, lvl_data: _TroopLevelData,
                  lvl: int, hit_box: pygame.Rect):
