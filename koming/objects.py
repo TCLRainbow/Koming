@@ -123,7 +123,7 @@ class _Troop(_Attackable, ABC):
         print(f'{self} selected target {self.target}')
 
     def search_path(self, weight_map: np.ndarray):
-        weight = weight_map[self.target.hit_box_slice]
+        weight = weight_map[self.target.hit_box_slice].copy()
         weight_map[self.target.hit_box_slice] = 0
         self.target_path = a_star(weight_map, self.hit_box.topleft, self.target.hit_box.topleft)
         weight_map[self.target.hit_box_slice] = weight

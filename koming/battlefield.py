@@ -7,6 +7,8 @@ import pygame
 from koming.data import Database, _DefenceData, _DefenceLevelData
 from koming.objects import _Troop, _CocObject, _Defence
 
+# Listening to Astronaut In The Ocean
+
 
 class Village:
     def __init__(self, side_len: int, db: Database):
@@ -21,27 +23,56 @@ class Village:
     def side_len(self):
         return self.__side_len
 
-    def random_pos(self):
-        return self.__rng.uniform(0, (self.side_len-0.5)/self.side_len, 2)
+    def random_troop_pos(self):
+        return self.__rng.integers(0, self.side_len, 2)
 
-    def add_troop(self, cls: Type[_Troop], lvl, scaled_pos=None):
-        if not scaled_pos:
-            scaled_pos = self.random_pos()
+    def random_defence_pos(self, defence_size: tuple[int, int]):
+        return self.__rng.integers(0, self.side_len - np.array(defence_size) + 1, 2)
+
+    def add_troop(self, cls: Type[_Troop], lvl, scaled_pos=None, retry=True):
+        if scaled_pos:
+            pos = self.scaled_to_village_coord(scaled_pos)
+        else:
+            pos = self.random_troop_pos()
 
         data = self.__db.get_troop(cls.NAME)
         lvl_data = data.get_level(lvl)
-        rect = pygame.Rect(self.scaled_to_village_coord(scaled_pos), (1, 1))
+        rect = pygame.Rect(pos, (1, 1))
+
+        if self.collide_defence_bound_box(rect):
+            if not retry:
+                return
+            pos = self.random_troop_pos()
+            rect.update(pos, (1, 1))
+            while self.collide_defence_bound_box(rect):
+                pos = self.random_troop_pos()
+                rect.update(pos, (1, 1))
+
         troop = cls(data, lvl_data, lvl, rect)
         self.troops.append(troop)
         return troop
 
-    def add_defence(self, cls: Type[_Defence], lvl, scaled_pos=None):
-        if not scaled_pos:
-            scaled_pos = self.random_pos()
+    def add_defence(self, cls: Type[_Defence], lvl, scaled_pos=None, retry=True):
+        if self.troops:
+            raise Exception("Cannot add defences once you start adding troops!")
 
         data: _DefenceData = self.__db.get_defence(cls.NAME)
         lvl_data: _DefenceLevelData = data.get_level(lvl)
-        hit_box = pygame.Rect(self.scaled_to_village_coord(scaled_pos), data.size)
+
+        if scaled_pos:
+            pos = self.scaled_to_village_coord(scaled_pos)
+        else:
+            pos = self.random_defence_pos(data.size)
+        hit_box = pygame.Rect(pos, data.size)
+        if self.collide_defence_hit_box(hit_box):
+            if not retry:
+                return
+            pos = self.random_defence_pos(data.size)
+            hit_box.update(pos, data.size)
+            while self.collide_defence_hit_box(hit_box):
+                pos = self.random_defence_pos(data.size)
+                hit_box.update(pos, data.size)
+
         defence = cls(data, lvl_data, lvl, hit_box)
 
         @defence.on_damaged
@@ -60,24 +91,19 @@ class Village:
 
     def remove_defence(self, defence: _Defence):
         self.map_weights[defence.hit_box_slice] = 0
-        print(self.defences, defence)
         self.defences.remove(defence)
 
     def update_map_defence_weight(self, defence: _Defence):
         self.map_weights[defence.hit_box_slice] = defence.map_weight
 
     def scaled_to_village_coord(self, coord: tuple[float, float], translate=0):
-        return round(coord[0] * self.side_len + translate), round(coord[1] * self.side_len + translate)
-
-    def scaled_translate_by_village(self, coord: tuple[float, float], x, y):
-        r = coord[0] + x / self.side_len, coord[1] + y / self.side_len
-        return r
-
-    def village_to_scaled_coord(self, coord: tuple[float, float], translate=0):
-        return (coord[0] + translate) / self.side_len, (coord[1] + translate) / self.side_len
+        return np.floor(np.array(coord) * self.side_len + translate)
 
     def collide_defence_hit_box(self, rect: pygame.Rect):
         return rect.collideobjects(self.defences, key=lambda d: d.hit_box)
+
+    def collide_defence_bound_box(self, rect: pygame.Rect):
+        return rect.collideobjects(self.defences, key=lambda d: d.bound_box)
 
     def setup_troop_target(self, troop: _Troop):
         troop.select_target(self.defences)
@@ -178,8 +204,8 @@ class UIVillage(Village):
         )
         return ui_rect
 
-    def add_troop(self, cls: Type[_Troop], lvl, scaled_pos=None):
-        troop = super().add_troop(cls, lvl, scaled_pos)
+    def add_troop(self, cls: Type[_Troop], lvl, scaled_pos=None, retry=True):
+        troop = super().add_troop(cls, lvl, scaled_pos, retry)
         tile = pygame.image.load(self._get_coc_obj_resource_path_(troop))
         tile = pygame.transform.scale(tile, (self.__ratio, self.__ratio))
         self.__tile_set.setdefault(troop.NAME, tile)
@@ -195,8 +221,8 @@ class UIVillage(Village):
 
         return troop
 
-    def add_defence(self, cls: Type[_Defence], lvl, scaled_pos=None):
-        defence = super().add_defence(cls, lvl, scaled_pos)
+    def add_defence(self, cls: Type[_Defence], lvl, scaled_pos=None, retry=True):
+        defence = super().add_defence(cls, lvl, scaled_pos, retry)
 
         @defence.on_destroy_completed
         def on_destroy_completed():
