@@ -72,11 +72,11 @@ class Database:
 
     def _load_defences_(self):
         data = {}
-        defence_records = self.__con.execute("SELECT * FROM Defenses").fetchall()
+        defence_records = self.__con.execute("SELECT * FROM Defences").fetchall()
         for defence_record in defence_records:
             defence_data = _DefenceData(defence_record[1:])
             level_records = self.__con.execute(
-                "SELECT * FROM DefenseLevels WHERE Name = ?", (defence_record[0],)
+                "SELECT * FROM DefenceLevels WHERE Name = ?", (defence_record[0],)
             ).fetchall()
             for lvl_record in level_records:
                 defence_data.add_level(_DefenceLevelData(lvl_record[2:]))
