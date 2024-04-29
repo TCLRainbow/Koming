@@ -42,11 +42,3 @@ def a_star(array, start_xy, goal_xy):
                         g_score[neighbor] = tentative_g_score
                         f_score[neighbor] = tentative_g_score + _heuristic_(neighbor, goal)
                         heapq.heappush(open_heap, (f_score[neighbor], neighbor))
-
-# nmap = np.array([
-#     [3, 0, 0, 5, 3, 0, 0],
-#     [0, 0, 0, 0, 0, 0, 0],
-#     [0, 0, 0, 0, 0, 0, 0],
-#     [0, 0, 0, 0, 0, 0, 0],
-# ])
-# print(a_star(nmap, (0, 0), (6, 0)))

@@ -92,6 +92,7 @@ class _Defence(_Attackable, ABC):
                 func()
         else:
             for func in self.__on_destroy_callbacks:
+                print('Running destroy callback')
                 func()
             for func in self.__on_destroy_completed_callbacks:
                 func()
@@ -119,7 +120,15 @@ class _Troop(_Attackable, ABC):
 
     def select_target(self, defences: list[_Defence]):
         # Naive: Should filter targets then select closest
-        self.target = choice(defences)
+
+        def filter_target(target: _Defence):
+            return not isinstance(target, Wall)
+
+        potential_targets = tuple(filter(filter_target, defences))
+        if potential_targets:
+            self.target = choice(potential_targets)
+        else:
+            self.target = None
         print(f'{self} selected target {self.target}')
 
     def search_path(self, weight_map: np.ndarray):

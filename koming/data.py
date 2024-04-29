@@ -53,7 +53,7 @@ class _DefenceData(_AttackableData):
 
 class Database:
     def __init__(self, file):
-        self.__con = sqlite3.connect(file)
+        self.__con = sqlite3.connect(f'file:{file}?mode=ro', uri=True)
         self.__troops = self._load_troops_()
         self.__defences = self._load_defences_()
 

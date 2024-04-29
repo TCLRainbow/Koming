@@ -11,6 +11,7 @@ from koming.objects import _Troop, _CocObject, _Defence
 
 
 class Village:
+
     def __init__(self, side_len: int, db: Database):
         self.__side_len = side_len
         self.__db = db
@@ -23,28 +24,63 @@ class Village:
     def side_len(self):
         return self.__side_len
 
+    def try_direction_project(self, obj: _CocObject, scaled_distance: int):
+        pos = obj.hit_box.topleft
+        new_pos = pos[0] + scaled_distance, pos[1]
+        if new_pos[0] < self.side_len:
+            return new_pos, (1, 0)
+        new_pos = pos[0] - scaled_distance, pos[1]
+        if new_pos[0] >= 0:
+            return new_pos, (-1, 0)
+        new_pos = pos[0], pos[1] + scaled_distance
+        if new_pos[1] < self.side_len:
+            return new_pos, (0, 1)
+        new_pos = pos[0], pos[1] - scaled_distance
+        if new_pos[1] >= 0:  # Optimisation: Cond should be removed
+            return new_pos, (0, -1)
+
     def random_troop_pos(self):
         return self.__rng.integers(0, self.side_len, 2)
 
     def random_defence_pos(self, defence_size: tuple[int, int]):
         return self.__rng.integers(0, self.side_len - np.array(defence_size) + 1, 2)
 
-    def add_troop(self, cls: Type[_Troop], lvl, scaled_pos=None, retry=True):
-        if scaled_pos:
-            pos = self.scaled_to_village_coord(scaled_pos)
-        else:
+    def random_move_troop(self, troop: _Troop):
+        if troop not in self.troops:
+            raise ValueError(f'{troop} is not a part of this village!')
+        pos = self.random_troop_pos()
+        rect = pygame.Rect(pos, (1, 1))
+        while self.collide_defence_bound_box(rect) or self.out_of_range(rect):
             pos = self.random_troop_pos()
+            rect.update(pos, (1, 1))
+        troop.hit_box.update(pos, (1, 1))
+
+    def random_move_defence(self, defence: _Defence):
+        if defence not in self.defences:
+            raise ValueError(f'{defence} is not a part of this village!')
+        pos = self.random_defence_pos(defence.size)
+        rect = pygame.Rect(pos, defence.size)
+        while self.collide_defence_hit_box(rect) or self.out_of_range(rect):
+            pos = self.random_defence_pos(defence.size)
+            rect.update(pos, defence.size)
+        self.move_defence(defence, rect)
+
+    def add_troop(self, cls: Type[_Troop], lvl, scaled_pos=None, retry=True):
+        if scaled_pos is None:
+            pos = self.random_troop_pos()
+        else:
+            pos = self.scaled_to_village_coord(scaled_pos)
 
         data = self.__db.get_troop(cls.NAME)
         lvl_data = data.get_level(lvl)
         rect = pygame.Rect(pos, (1, 1))
 
-        if self.collide_defence_bound_box(rect):
+        if self.collide_defence_bound_box(rect) or self.out_of_range(rect):
             if not retry:
                 return
             pos = self.random_troop_pos()
             rect.update(pos, (1, 1))
-            while self.collide_defence_bound_box(rect):
+            while self.collide_defence_bound_box(rect) or self.out_of_range(rect):
                 pos = self.random_troop_pos()
                 rect.update(pos, (1, 1))
 
@@ -59,17 +95,17 @@ class Village:
         data: _DefenceData = self.__db.get_defence(cls.NAME)
         lvl_data: _DefenceLevelData = data.get_level(lvl)
 
-        if scaled_pos:
-            pos = self.scaled_to_village_coord(scaled_pos)
-        else:
+        if scaled_pos is None:
             pos = self.random_defence_pos(data.size)
+        else:
+            pos = self.scaled_to_village_coord(scaled_pos)
         hit_box = pygame.Rect(pos, data.size)
-        if self.collide_defence_hit_box(hit_box):
+        if self.collide_defence_hit_box(hit_box) or self.out_of_range(hit_box):
             if not retry:
                 return
             pos = self.random_defence_pos(data.size)
             hit_box.update(pos, data.size)
-            while self.collide_defence_hit_box(hit_box):
+            while self.collide_defence_hit_box(hit_box) or self.out_of_range(hit_box):
                 pos = self.random_defence_pos(data.size)
                 hit_box.update(pos, data.size)
 
@@ -93,11 +129,31 @@ class Village:
         self.map_weights[defence.hit_box_slice] = 0
         self.defences.remove(defence)
 
+    def move_defence(self, defence: _Defence, new_rect):
+        old_hit_box = defence.hit_box.copy()
+        old_bound_box = defence.bound_box.copy()
+        defence.hit_box.update(new_rect)
+        defence.bound_box = new_rect.inflate(2, 2)
+        return old_hit_box, old_bound_box
+
+    def move_defences(self, defences: list[_Defence], new_rects: list[pygame.Rect]):
+        old_hit_boxes = []
+        old_bound_boxes = []
+        for defence, new_rect in zip(defences, new_rects):
+            old_hit_boxes.append(defence.hit_box.copy())
+            old_bound_boxes.append(defence.bound_box.copy())
+            defence.hit_box.update(new_rect)
+            defence.bound_box = new_rect.inflate(2, 2)
+        return old_hit_boxes, old_bound_boxes
+
     def update_map_defence_weight(self, defence: _Defence):
         self.map_weights[defence.hit_box_slice] = defence.map_weight
 
-    def scaled_to_village_coord(self, coord: tuple[float, float], translate=0):
-        return np.floor(np.array(coord) * self.side_len + translate)
+    def scaled_to_village_coord(self, coord: tuple[float, float]):
+        return np.floor(np.array(coord) * self.side_len)
+
+    def village_to_scaled_coord(self, coord: tuple[int, int]):
+        return np.array(coord) / self.side_len
 
     def collide_defence_hit_box(self, rect: pygame.Rect):
         return rect.collideobjects(self.defences, key=lambda d: d.hit_box)
@@ -105,8 +161,16 @@ class Village:
     def collide_defence_bound_box(self, rect: pygame.Rect):
         return rect.collideobjects(self.defences, key=lambda d: d.bound_box)
 
+    def out_of_range(self, rect: pygame.Rect):
+        return rect.x < 0 or rect.x >= self.side_len or rect.y < 0 or rect.y >= self.side_len
+
+    def test_hit_valid(self, rect: pygame.Rect):
+        return not (self.out_of_range(rect) or self.collide_defence_hit_box(rect))
+
     def setup_troop_target(self, troop: _Troop):
         troop.select_target(self.defences)
+        if troop.target is None:
+            return
         troop.search_path(self.map_weights)
 
         @troop.target.on_destroy
@@ -131,10 +195,6 @@ class Village:
             self.end_tick()
 
         print('Program ended')
-        while True:
-            event = pygame.event.wait()
-            if event.type == pygame.QUIT:
-                return
 
     def draw_troops_path(self):
         pass
@@ -223,6 +283,8 @@ class UIVillage(Village):
 
     def add_defence(self, cls: Type[_Defence], lvl, scaled_pos=None, retry=True):
         defence = super().add_defence(cls, lvl, scaled_pos, retry)
+        if defence is None:
+            return
 
         @defence.on_destroy_completed
         def on_destroy_completed():
@@ -241,6 +303,27 @@ class UIVillage(Village):
         if self.__ui_debug:
             self.draw_rect(defence.bound_box, blank, self.__defences_debug_surface)
         self.draw_rect(defence.hit_box, blank, self.__defences_surface)
+
+    def move_defence(self, defence: _Defence, new_rect):
+        old_hit_box, old_bound_box = super().move_defence(defence, new_rect)
+        blank = (0,) * 4
+        if self.__ui_debug:
+            self.draw_rect(old_bound_box, blank, self.__defences_debug_surface)
+        self.draw_rect(old_hit_box, blank, self.__defences_surface)
+        self.draw_defence(defence)
+        return old_hit_box, old_bound_box
+
+    def move_defences(self, defences: list[_Defence], new_rects: list[pygame.Rect]):
+        old_hit_boxes, old_bound_boxes = super().move_defences(defences, new_rects)
+        blank = (0,) * 4
+        if self.__ui_debug:
+            for bound_box in old_bound_boxes:
+                self.draw_rect(bound_box, blank, self.__defences_debug_surface)
+        for hit_box in old_hit_boxes:
+            self.draw_rect(hit_box, blank, self.__defences_surface)
+        for defence in defences:
+            self.draw_defence(defence)
+        return old_hit_boxes, old_bound_boxes
 
     def draw_rect(self, rect: pygame.Rect, rgb=(255, 255, 255), surface: pygame.Surface = None, scale=True):
         ui_rect = self.village_rect_to_ui(rect) if scale else rect
@@ -268,6 +351,14 @@ class UIVillage(Village):
             self.screen.blit(self.__troops_debug_surface, surfaces_top_left)
         self.screen.blit(self.__troops_surface, surfaces_top_left)
         pygame.display.update()
+
+    def redraw_defences(self):
+        blank = (0,)*4
+        if self.__ui_debug:
+            self.__defences_debug_surface.fill(blank)
+        self.__defences_surface.fill(blank)
+        for defence in self.defences:
+            self.draw_defence(defence)
 
     def draw_troops_path(self):
         if self.__ui_debug:
